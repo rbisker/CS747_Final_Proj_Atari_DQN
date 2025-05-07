@@ -1,0 +1,4 @@
+Logging started. Output will be written to both notebook and ./test_log.txt
+[{"variableName": "TRAINABLE_ACTIONS", "type": "list", "supportedEngines": ["pandas"], "isLocalVariable": false, "rawType": "builtins.list"}]
+[{"variableName": "TRAINABLE_ACTIONS", "type": "list", "supportedEngines": ["pandas"], "isLocalVariable": false, "rawType": "builtins.list"}]
+this is another test line blah blah

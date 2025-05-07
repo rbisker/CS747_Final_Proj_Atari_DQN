@@ -1,0 +1,40 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# VS Code
+.vscode/
+
+# Model files
+*.pth
+*.pt
+
+#Replay buffers
+*.pkl
+
+# Data
+*.csv
+*.npz
+*.npy
+
+# Recordings
+*.mp4
+
+#zip files
+*.zip
