@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
-from memory import ReplayMemory
+from memory import ReplayMemory, ReplayMemory_PER
 from model import DQN_DualBranch
 from utils import *
 from config import *
@@ -28,6 +28,8 @@ class Agent(Agent_base):
         self.target_net = DQN_DualBranch(action_size).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.diff_scaling_factor = 1.5
+        print("Setting up PER Replay Buffer")
+        self.memory = ReplayMemory_PER()
 
     def get_agent_type(self):
         return "Standard DQN Agent w time diffs"
@@ -65,7 +67,13 @@ class Agent(Agent_base):
             self.epsilon = max(self.epsilon, self.epsilon_min)
 
         # Sample and unpack
-        mini_batch, mini_batch_indices = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+        if type(self.memory) == ReplayMemory:
+            mini_batch = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+        elif type(self.memory) == ReplayMemory_PER:
+            mini_batch, mini_batch_indices = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+        else:
+            raise NotImplementedError("Invalid replay buffer type")
+
         mini_batch = np.array(mini_batch, dtype=object).transpose()
 
         raw_histories = np.stack(mini_batch[0], axis=0)  # (batch_size, 5, 84, 84)
@@ -182,9 +190,10 @@ class Agent(Agent_base):
             target_q_values = rewards + self.discount_factor * next_state_max_q_values * (~terminations)
             target_q_values = target_q_values.unsqueeze(1)
 
-            # Update memory td_errors
-            td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
-            self.memory.update_td_errors(mini_batch_indices, td_errors)
+            #If Using PER, update memory td_errors
+            if type(self.memory) == ReplayMemory_PER:
+                td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
+                self.memory.update_td_errors(mini_batch_indices, td_errors)
         
         # Compute the Huber Loss
         loss_fn = nn.SmoothL1Loss()

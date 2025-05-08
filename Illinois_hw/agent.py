@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
-from memory import ReplayMemory, ReplayMemoryLSTM
+from memory import *
 from model import DQN, DQN_LSTM
 from utils import *
 from config import *
@@ -33,16 +33,19 @@ class Agent():
         print(self.get_agent_type() + " initialized")
 
         # Load replay buffer from file if a path is provided
-        if replay_buffer_path and os.path.exists(replay_buffer_path):
-            with open(replay_buffer_path, 'rb') as f:
-                self.memory = pickle.load(f)
-            print(f"Replay buffer loaded from '{replay_buffer_path}' with size {len(self.memory)}")
-        else:
-            if replay_buffer_path:
-                print(f"Replay buffer path '{replay_buffer_path}' not found. Creating new empty buffer.")
-            else:
-                print("No replay buffer path provided. Creating new empty buffer.")
-            self.memory = ReplayMemory()
+        # if replay_buffer_path and os.path.exists(replay_buffer_path):
+        #     with open(replay_buffer_path, 'rb') as f:
+        #         self.memory = pickle.load(f)
+        #     print(f"Replay buffer loaded from '{replay_buffer_path}' with size {len(self.memory)}")
+        # else:
+        #     if replay_buffer_path:
+        #         print(f"Replay buffer path '{replay_buffer_path}' not found. Creating new empty buffer.")
+        #     else:
+        #         print("No replay buffer path provided. Creating new empty buffer.")
+        #     self.memory = ReplayMemory()
+
+        print("Setting up Circular PER Replay Buffer of size", Memory_capacity)
+        self.memory = CircularReplayMemoryPER(Memory_capacity, HISTORY_SIZE)
 
         # Create the policy and target nets and sync them
         self.policy_net = DQN(action_size).to(device)
@@ -84,7 +87,14 @@ class Agent():
             # Clamp in case of overshoot
             self.epsilon = max(self.epsilon, self.epsilon_min)
             
-        mini_batch = self.memory.improved_sample_mini_batch(batch_size = BATCH_SIZE)
+        # Sample and unpack
+        if type(self.memory) == ReplayMemory:
+            mini_batch = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+        elif type(self.memory) == CircularReplayMemoryPER:
+            mini_batch, mini_batch_indices = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+        else:
+            raise NotImplementedError("Invalid replay buffer type")
+
         mini_batch = np.array(mini_batch, dtype=object).transpose()
 
         history = np.stack(mini_batch[0], axis=0)
@@ -121,6 +131,11 @@ class Agent():
             # Compute the target Q-value.  Disregard the next Q-value if the game is over
             target_q_values = rewards + self.discount_factor * next_state_max_q_values * (~terminations)
             target_q_values = target_q_values.unsqueeze(1)
+
+            #If Using PER, update memory td_errors
+            if type(self.memory) == CircularReplayMemoryPER:
+                td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
+                self.memory.update_td_errors(mini_batch_indices, td_errors)
         
         # Compute the Huber Loss
         loss_fn = nn.SmoothL1Loss()

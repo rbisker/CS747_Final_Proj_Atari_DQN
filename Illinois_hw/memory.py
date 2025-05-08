@@ -24,7 +24,7 @@ class ReplayMemory(object):
             tries += 1
             i = random.randint(0, sample_range - 1)
             
-            # Reject this index previously used OR if any of the first HISTORY_SIZE frames after idx ends in a life loss
+            # Reject this index if previously used OR if any of the first HISTORY_SIZE frames after idx ends in a life loss
             if any(self.memory[i + j][3] for j in range(HISTORY_SIZE)) or i in used_indices:     
                 # print("[DEBUG] index rejected")
                 continue  # Try another index
@@ -55,7 +55,6 @@ class ReplayMemory_PER(object):
         self.memory = deque(maxlen=Memory_capacity)
         self.valid_flags = deque(maxlen=Memory_capacity) # Parallel flag queue
        
-
     
     def push(self, history, action, reward, done, td_error = 1.0):  
         self.memory.append((history, action, reward, done, td_error))
@@ -77,18 +76,11 @@ class ReplayMemory_PER(object):
     def improved_sample_mini_batch(self, batch_size = BATCH_SIZE, history_size = HISTORY_SIZE):
         assert len(self.memory) == len(self.valid_flags), "Repaly buffer and valid flags must have the same length."
         mini_batch = []
-        
-        #Use cached valid indices
-        if self._valid_dirty:
-            self._valid_indices_cache = [i for i, val in enumerate(self.valid_flags) if val]
-            self._valid_dirty = False
-
-        valid_indices = self._valid_indices_cache
+        valid_indices = [i for i, val in enumerate(self.valid_flags) if val]
         
         if len(valid_indices) < batch_size:
-            raise ValueError("Not enough samples in replay buffer to form a valid mini-batch.")
-
-        # idx_sample = random.sample(range(sample_range), batch_size)
+            raise ValueError("Not enough valid samples in replay buffer to form a valid mini-batch.")
+        
         
         probs = [self.memory[i][4] for i in valid_indices]
         idx_sample = random.choices(valid_indices, weights=probs, k=batch_size)
@@ -120,6 +112,8 @@ class ReplayMemory_PER(object):
         ################################################
             
         return mini_batch, idx_sample
+
+ 
     def update_td_errors(self, indices, new_td_errors):
         for idx, error in zip(indices, new_td_errors):
             # Convert the tuple to list to modify
@@ -137,6 +131,105 @@ class ReplayMemory_PER(object):
                 "std:", np.std(td_errors),
                 "min:", np.min(td_errors),
                 "max:", np.max(td_errors))
+
+
+class CircularReplayMemoryPER:
+    def __init__(self, capacity, history_size):
+        self.capacity = capacity
+        self.history_size = history_size
+        self.memory = [None] * capacity
+        self.td_errors = np.ones(capacity, dtype=np.float32)
+        self.valid_flags = [False] * capacity
+        self.valid_indices = []  # Only valid sampling start indices
+        self.position = 0
+        self.size = 0
+
+    def push(self, history, action, reward, done, td_error=1.0):
+        i = self.position
+        self.memory[i] = (history, action, reward, done)
+        self.td_errors[i] = td_error
+        self.valid_flags[i] = False  # Placeholder, updated retroactively
+
+        # Retroactively validate a sample at index (i - history_size)
+        valid_start = (i - self.history_size) % self.capacity
+        if self.size >= self.history_size + 1:
+            is_valid = True
+            for j in range(self.history_size):
+                check_idx = (valid_start + j) % self.capacity
+                if self.memory[check_idx][3]:  # If `done` is True
+                    is_valid = False
+                    break
+            self.valid_flags[valid_start] = is_valid
+            if is_valid:
+                self.valid_indices.append(valid_start)
+
+        # Handle validity buffer after memory is full and has looped
+        if self.size == self.capacity:
+            overwritten_index = self.position
+            if self.valid_flags[overwritten_index]:
+                try:
+                    self.valid_indices.remove(overwritten_index) # Remove the overwritten index from valid list
+                except ValueError:
+                    pass  # Already removed
+                self.valid_flags[overwritten_index] = False  # reset overwritten index valid flag to False
+
+        self.position = (self.position + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
+
+    def improved_sample_mini_batch(self, batch_size):
+        # assert sum(self.valid_flags) == len(self.valid_indices), "Valid indices must match number of true valid flags"
+        if len(self.valid_indices) < batch_size:
+            raise ValueError("Not enough valid samples.")
+
+        # === PER sampling via cumulative priority ===
+        priors = np.array([self.td_errors[i] for i in self.valid_indices], dtype=np.float32)
+        priors_sum = priors.sum()
+        if priors_sum == 0:
+            probs = np.ones_like(priors) / len(priors)
+        else:
+            probs = priors / priors_sum
+
+        cum_probs = np.cumsum(probs)
+        rand_vals = np.random.rand(batch_size) * cum_probs[-1]
+        sample_ids = np.searchsorted(cum_probs, rand_vals)
+        sample_indices = [self.valid_indices[i] for i in sample_ids]
+
+        mini_batch = []
+        for idx in sample_indices:
+            sample = [(self.memory[(idx + j) % self.capacity]) for j in range(self.history_size + 1)]
+            sample = np.array(sample, dtype=object)
+
+            states = np.stack(sample[:, 0], axis=0)
+            actions = int(sample[self.history_size - 1, 1])
+            rewards = float(sample[self.history_size - 1, 2])
+            terminations = bool(sample[self.history_size - 1, 3])
+            mini_batch.append((states, actions, rewards, terminations))
+
+        ## DEBUG ###
+        if random.random() < 0.001:
+            # # Print a few sampled TD errors
+            # sampled_td_errors = [self.td_errors[i] for i in sample_indices[:5]]
+            # print("[PER DEBUG] Sampled TD-errors (first 5):", sampled_td_errors)
+        
+            # Check validity
+            print("[PER DEBUG] Len of valid indices:", len(self.valid_indices), "  Len of valid flags:", sum(self.valid_flags))
+        ################################################
+
+        return mini_batch, sample_indices
+
+    def update_td_errors(self, indices, new_errors):
+        for i, err in zip(indices, new_errors):
+            self.td_errors[i] = err
+
+    def __len__(self):
+        return self.size
+    
+    def log_td_error_distribution(self):
+        print("[PER STATS] TD-error mean:", np.mean(self.td_errors),
+            "std:", np.std(self.td_errors),
+            "min:", np.min(self.td_errors),
+            "max:", np.max(self.td_errors))
+
 
 
 class ReplayMemoryLSTM(ReplayMemory):

@@ -16,21 +16,26 @@ def find_max_lives(env):
 def check_live(life, cur_life):
     return life > cur_life
 
-# def get_frame(X):
-#     x = np.uint8(resize(rgb2gray(X), (HEIGHT, WIDTH), mode='reflect') * 255)
-#     return x
+def get_frame(X):
+    x = np.uint8(resize(rgb2gray(X), (HEIGHT, WIDTH), mode='reflect') * 255)
+    return x
 
+# As opposed to get_frame, crops out scoreboard at top and black space on bottom
 def new_get_frame(X):
     # Convert to grayscale
     gray = rgb2gray(X)
-    # Crop out top ~15 rows (tune as needed)
-    gray_cropped = gray[15:, :]  # from (210, 160) → (195, 160)
+    # Crop out top 20 and bottom 5 rows
+    gray_cropped = gray[20:-5, :]  # from (210, 160) → (185, 160)
     # Resize to (HEIGHT, WIDTH)
     resized = resize(gray_cropped, (HEIGHT, WIDTH), mode='reflect')
     return np.uint8(resized * 255)
 
-
 def get_init_state(history, s, history_size):
+    frame = get_frame(s)
+    for i in range(history_size):
+        history[i, :, :] = frame
+
+def new_get_init_state(history, s, history_size):
     frame = new_get_frame(s)
     for i in range(history_size):
         history[i, :, :] = frame
@@ -41,24 +46,6 @@ def do_random_actions(env, num_actions):
         obs, _, _, _, _ = env.step(random_action)
     return obs
 
-# def ensure_fire(env, max_attempts = 10):
-#     obs, _, _, _, _ = env.step(0)  # do nothing
-#     prev_frame = get_frame(obs)
-
-#     for attempt in range(max_attempts):
-#         obs, reward, terminated, truncated, info = env.step(1)  # FIRE action
-#         done = terminated or truncated
-#         curr_frame = get_frame(obs)
-
-#         if not done and np.abs(curr_frame - prev_frame).sum() > 10:  # threshold can be tuned
-#             # print(f"[DEBUG]: FIRE action successful after {attempt + 1} attempts")
-#             return obs, reward, done, info
-
-#         prev_frame = curr_frame
-
-#     #if fire action failed, return done to restart the episode
-#     return obs, reward, True, info
-
 def reset_after_life_loss(env, history):
     """
     Resets the environment state after a life is lost, without resetting the entire episode.
@@ -68,7 +55,7 @@ def reset_after_life_loss(env, history):
     num_random_actions = random.randint(10, 25)
     obs = None
     for _ in range(num_random_actions):  
-        obs, _, _, _, _ = env.step(random.choice(TRAINABLE_ACTIONS))
+        obs, _, _, _, _ = env.step(random.choice([2, 3]))  #move paddle randomly left and right a bit before firing
 
     # Try firing the ball, detect success via frame differencing
     max_attempts = 5
@@ -96,9 +83,10 @@ def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    # torch.use_deterministic_algorithms(True)
 
 
 # def compute_optical_flow(prev: np.ndarray, curr: np.ndarray):
