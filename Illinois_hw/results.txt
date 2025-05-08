@@ -1,0 +1,120 @@
+DDQN
+Run12/good_Run12_DDQN_750K_frames_imprvdBatching_2319_eps.pth")
+Double DQN Agent initialized
+No replay buffer path provided. Creating new empty buffer.
+episode: 0   seed: 765   score: 13.0   epsilon: 0.05   steps: 481
+episode: 1   seed: 817   score: 10.0   epsilon: 0.05   steps: 458
+episode: 2   seed: 53   score: 7.0   epsilon: 0.05   steps: 381
+episode: 3   seed: 705   score: 17.0   epsilon: 0.05   steps: 484
+episode: 4   seed: 990   score: 7.0   epsilon: 0.05   steps: 358
+episode: 5   seed: 511   score: 9.0   epsilon: 0.05   steps: 319
+episode: 6   seed: 236   score: 10.0   epsilon: 0.05   steps: 463
+episode: 7   seed: 661   score: 9.0   epsilon: 0.05   steps: 307
+episode: 8   seed: 654   score: 8.0   epsilon: 0.05   steps: 379
+episode: 9   seed: 418   score: 12.0   epsilon: 0.05   steps: 437
+episode: 10   seed: 804   score: 11.0   epsilon: 0.05   steps: 490
+episode: 11   seed: 968   score: 10.0   epsilon: 0.05   steps: 391
+episode: 12   seed: 1   score: 9.0   epsilon: 0.05   steps: 395
+episode: 13   seed: 749   score: 12.0   epsilon: 0.05   steps: 313
+episode: 14   seed: 125   score: 9.0   epsilon: 0.05   steps: 319
+episode: 15   seed: 293   score: 13.0   epsilon: 0.05   steps: 358
+episode: 16   seed: 985   score: 14.0   epsilon: 0.05   steps: 473
+episode: 17   seed: 574   score: 10.0   epsilon: 0.05   steps: 392
+episode: 18   seed: 447   score: 13.0   epsilon: 0.05   steps: 471
+episode: 19   seed: 948   score: 12.0   epsilon: 0.05   steps: 405
+episode: 20   seed: 687   score: 10.0   epsilon: 0.05   steps: 480
+episode: 21   seed: 317   score: 12.0   epsilon: 0.05   steps: 293
+episode: 22   seed: 280   score: 6.0   epsilon: 0.05   steps: 335
+episode: 23   seed: 645   score: 4.0   epsilon: 0.05   steps: 240
+episode: 24   seed: 927   score: 11.0   epsilon: 0.05   steps: 528
+episode: 25   seed: 842   score: 8.0   epsilon: 0.05   steps: 405
+episode: 26   seed: 309   score: 7.0   epsilon: 0.05   steps: 344
+episode: 27   seed: 616   score: 8.0   epsilon: 0.05   steps: 292
+episode: 28   seed: 717   score: 9.0   epsilon: 0.05   steps: 411
+episode: 29   seed: 930   score: 6.0   epsilon: 0.05   steps: 335
+episode: 30   seed: 778   score: 10.0   epsilon: 0.05   steps: 480
+episode: 31   seed: 323   score: 8.0   epsilon: 0.05   steps: 276
+episode: 32   seed: 595   score: 7.0   epsilon: 0.05   steps: 344
+episode: 33   seed: 798   score: 11.0   epsilon: 0.05   steps: 543
+episode: 34   seed: 195   score: 14.0   epsilon: 0.05   steps: 374
+episode: 35   seed: 11   score: 10.0   epsilon: 0.05   steps: 332
+episode: 36   seed: 483   score: 13.0   epsilon: 0.05   steps: 327
+episode: 37   seed: 316   score: 10.0   epsilon: 0.05   steps: 480
+episode: 38   seed: 690   score: 8.0   epsilon: 0.05   steps: 379
+episode: 39   seed: 951   score: 12.0   epsilon: 0.05   steps: 293
+episode: 40   seed: 196   score: 17.0   epsilon: 0.05   steps: 350
+episode: 41   seed: 307   score: 10.0   epsilon: 0.05   steps: 480
+episode: 42   seed: 906   score: 10.0   epsilon: 0.05   steps: 358
+episode: 43   seed: 558   score: 16.0   epsilon: 0.05   steps: 426
+episode: 44   seed: 516   score: 10.0   epsilon: 0.05   steps: 351
+episode: 45   seed: 844   score: 14.0   epsilon: 0.05   steps: 512
+episode: 46   seed: 410   score: 7.0   epsilon: 0.05   steps: 344
+episode: 47   seed: 965   score: 11.0   epsilon: 0.05   steps: 262
+episode: 48   seed: 371   score: 7.0   epsilon: 0.05   steps: 241
+episode: 49   seed: 886   score: 8.0   epsilon: 0.05   steps: 292
+Mean Score:  10.18
+Std Score:  2.7977848380459855
+Max Score:  17.0
+Min Score:  4.0
+Median Score:  10.0
+
+DQN
+Run13/good_Run13_StdDQN_750K_frames_imprvdBatching_2477_eps.pth
+DQN Agent initialized
+No replay buffer path provided. Creating new empty buffer.
+  self.policy_net.load_state_dict(torch.load(path))
+episode: 0   seed: 765   score: 29.0   epsilon: 0.05   steps: 603
+episode: 1   seed: 817   score: 30.0   epsilon: 0.05   steps: 622
+episode: 2   seed: 53   score: 22.0   epsilon: 0.05   steps: 523
+episode: 3   seed: 705   score: 23.0   epsilon: 0.05   steps: 764
+episode: 4   seed: 990   score: 23.0   epsilon: 0.05   steps: 466
+episode: 5   seed: 511   score: 17.0   epsilon: 0.05   steps: 484
+episode: 6   seed: 236   score: 23.0   epsilon: 0.05   steps: 432
+episode: 7   seed: 661   score: 22.0   epsilon: 0.05   steps: 484
+episode: 8   seed: 654   score: 24.0   epsilon: 0.05   steps: 588
+episode: 9   seed: 418   score: 34.0   epsilon: 0.05   steps: 562
+episode: 10   seed: 804   score: 23.0   epsilon: 0.05   steps: 502
+episode: 11   seed: 968   score: 30.0   epsilon: 0.05   steps: 558
+episode: 12   seed: 1   score: 21.0   epsilon: 0.05   steps: 492
+episode: 13   seed: 749   score: 25.0   epsilon: 0.05   steps: 508
+episode: 14   seed: 125   score: 19.0   epsilon: 0.05   steps: 424
+episode: 15   seed: 293   score: 25.0   epsilon: 0.05   steps: 508
+episode: 16   seed: 985   score: 16.0   epsilon: 0.05   steps: 465
+episode: 17   seed: 574   score: 31.0   epsilon: 0.05   steps: 682
+episode: 18   seed: 447   score: 24.0   epsilon: 0.05   steps: 456
+episode: 19   seed: 948   score: 23.0   epsilon: 0.05   steps: 461
+episode: 20   seed: 687   score: 24.0   epsilon: 0.05   steps: 581
+episode: 21   seed: 317   score: 30.0   epsilon: 0.05   steps: 558
+episode: 22   seed: 280   score: 25.0   epsilon: 0.05   steps: 557
+episode: 23   seed: 645   score: 28.0   epsilon: 0.05   steps: 465
+episode: 24   seed: 927   score: 20.0   epsilon: 0.05   steps: 562
+episode: 25   seed: 842   score: 22.0   epsilon: 0.05   steps: 517
+episode: 26   seed: 309   score: 20.0   epsilon: 0.05   steps: 384
+episode: 27   seed: 616   score: 23.0   epsilon: 0.05   steps: 567
+episode: 28   seed: 717   score: 19.0   epsilon: 0.05   steps: 397
+episode: 29   seed: 930   score: 23.0   epsilon: 0.05   steps: 609
+episode: 30   seed: 778   score: 31.0   epsilon: 0.05   steps: 585
+episode: 31   seed: 323   score: 32.0   epsilon: 0.05   steps: 803
+episode: 32   seed: 595   score: 18.0   epsilon: 0.05   steps: 365
+episode: 33   seed: 798   score: 19.0   epsilon: 0.05   steps: 567
+episode: 34   seed: 195   score: 17.0   epsilon: 0.05   steps: 396
+episode: 35   seed: 11   score: 18.0   epsilon: 0.05   steps: 514
+episode: 36   seed: 483   score: 33.0   epsilon: 0.05   steps: 570
+episode: 37   seed: 316   score: 9.0   epsilon: 0.05   steps: 421
+episode: 38   seed: 690   score: 22.0   epsilon: 0.05   steps: 419
+episode: 39   seed: 951   score: 26.0   epsilon: 0.05   steps: 561
+episode: 40   seed: 196   score: 17.0   epsilon: 0.05   steps: 477
+episode: 41   seed: 307   score: 22.0   epsilon: 0.05   steps: 517
+episode: 42   seed: 906   score: 23.0   epsilon: 0.05   steps: 489
+episode: 43   seed: 558   score: 28.0   epsilon: 0.05   steps: 612
+episode: 44   seed: 516   score: 27.0   epsilon: 0.05   steps: 618
+episode: 45   seed: 844   score: 29.0   epsilon: 0.05   steps: 593
+episode: 46   seed: 410   score: 20.0   epsilon: 0.05   steps: 463
+episode: 47   seed: 965   score: 25.0   epsilon: 0.05   steps: 507
+episode: 48   seed: 371   score: 26.0   epsilon: 0.05   steps: 583
+episode: 49   seed: 886   score: 26.0   epsilon: 0.05   steps: 558
+Mean Score:  23.72
+Std Score:  4.94384465775372
+Max Score:  34.0
+Min Score:  9.0
+Median Score:  23.0
