@@ -142,7 +142,7 @@ class Agent():
             # Anneal Beta
             self.beta = min(1.0, self.beta + (1.0-self.beta_min)/TRAINING_STEPS)
 
-            # Update TD-errors in memory
+            # Update TD-errors in replay buffer
             td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
             self.memory.update_td_errors(mini_batch_indices, td_errors)
 

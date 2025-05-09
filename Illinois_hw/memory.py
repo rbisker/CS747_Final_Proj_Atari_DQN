@@ -55,22 +55,33 @@ class ReplayMemory(object):
 
 
 
+'''
+Switched replay buffer from deque to a cirular buffer to allow for effecient tracking of valid states and td-errors in 
+a manner that was impossible to do with deques without requiring an O(n) scan through buffer every training step to search for valid
+states
+'''
 class CircularReplayMemoryPER:
     def __init__(self, capacity, history_size):
         self.capacity = capacity
         self.history_size = history_size
         self.memory = [None] * capacity
-        self.td_errors = np.ones(capacity, dtype=np.float32)
-        self.valid_flags = [False] * capacity
-        self.valid_indices = []  # Only valid sampling start indices
+        self.td_errors = np.ones(capacity, dtype=np.float32)  # TD-error for state beginning at each index
+        self.valid_flags = [False] * capacity # True if the next HISTORY_SIZE frames forward are not terminal
+        self.valid_indices = []  # Only true for frames that are the start of a valid state
         self.position = 0
         self.size = 0
+
+        #Priority Caching
+        self._priority_cache_dirty = True
+        self._cached_probs = None
+        self._cached_index_map = None
 
     def push(self, history, action, reward, done, td_error=1.0):
         i = self.position
         self.memory[i] = (history, action, reward, done)
         self.td_errors[i] = td_error
         self.valid_flags[i] = False  # Placeholder, updated retroactively
+        self._priority_cache_dirty = True
 
         # Retroactively validate a sample at index (i - history_size)
         valid_start = (i - self.history_size) % self.capacity
@@ -85,6 +96,8 @@ class CircularReplayMemoryPER:
             if is_valid:
                 self.valid_indices.append(valid_start)
 
+        
+
         # Handle validity buffer after memory is full and has looped
         if self.size == self.capacity:
             overwritten_index = self.position
@@ -98,10 +111,11 @@ class CircularReplayMemoryPER:
         self.size = min(self.size + 1, self.capacity)
 
     """
-    Improved version of sample_mini_batch that uses priority sampling based on TD-errors and avoids including samples that cross a lost life.
+    Improved version of sample_mini_batch that uses priority experience replay (PER) based on TD-errors 
+    and avoids including sampling states that cross a lost life frame.
     :param batch_size: The size of the mini-batch to sample.
-    :param HISTORY_SIZE: The number of frames in the history of the environment.
-    :return: A list of tuples containing the state history, action, reward, and termination signal for each sample in the mini-batch.
+    :param HISTORY_SIZE: The number frames that make up a state passed to the network
+    :return: A list of tuples containing the states, actions, rewards, and termination signals for each sample in the mini-batch.
     """
     def improved_sample_mini_batch(self, batch_size):
         assert sum(self.valid_flags) == len(self.valid_indices), f"Valid indices must match number of true valid flags.  \
@@ -146,16 +160,18 @@ class CircularReplayMemoryPER:
     under the current priority distribution (with exponent alpha).
     """
     def get_sampling_probs(self, indices, alpha=PER_ALPHA):
-        all_priorities = np.array([self.td_errors[i] for i in self.valid_indices], dtype=np.float32)
-        all_priorities = np.power(all_priorities, alpha)
-        total_priority = all_priorities.sum()
-        probs = all_priorities / total_priority if total_priority > 0 else np.ones_like(all_priorities)/len(self.valid_indices)
-        
-        # Map each index in `indices` to its position in `valid_indices`
-        index_to_pos = {idx: i for i, idx in enumerate(self.valid_indices)}
+        # Get sampling probabilities for all valid indices
+        if self._priority_cache_dirty:
+            all_priorities = np.array([self.td_errors[i] for i in self.valid_indices], dtype=np.float32)
+            all_priorities = np.power(all_priorities, alpha)
+            total_priority = all_priorities.sum()
+            self._cached_probs = all_priorities / total_priority if total_priority > 0 else np.ones_like(all_priorities)/len(self.valid_indices)
+            # Map each index in `indices` to its position in `valid_indices`
+            self._cached_index_map = index_to_pos = {idx: i for i, idx in enumerate(self.valid_indices)}
+            self._priority_cache_dirty = False
 
         # Extract sampling probs for just the passed indices
-        sample_probs = np.array([probs[index_to_pos[i]] for i in indices], dtype=np.float32)
+        sample_probs = np.array([self._cached_probs[self._cached_index_map[i]] for i in indices], dtype=np.float32)
 
         return sample_probs
 
@@ -163,6 +179,7 @@ class CircularReplayMemoryPER:
     def update_td_errors(self, indices, new_errors):
         for i, err in zip(indices, new_errors):
             self.td_errors[i] = err
+        self._priority_cache_dirty = True
 
     def __len__(self):
         return self.size
