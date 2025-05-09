@@ -109,9 +109,10 @@ class CircularReplayMemoryPER:
         if len(self.valid_indices) < batch_size:
             raise ValueError("Not enough valid samples.")
 
+        # get sampling probabilities weighted by TD-errors
         probs = self.get_sampling_probs(self.valid_indices)
 
-        # Use cumulative sum and searchsorted for increased efficiency
+        # sample indices probabilisitcally using cumulative sum and searchsorted for increased efficiency
         cum_probs = np.cumsum(probs)
         rand_vals = np.random.rand(batch_size) * cum_probs[-1]
         sample_ids = np.searchsorted(cum_probs, rand_vals)

@@ -146,9 +146,9 @@ class Agent():
             td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
             self.memory.update_td_errors(mini_batch_indices, td_errors)
 
-            # Importance sampling
+            # Importance sampling to remove the bias of oversampling high TD-error states
             sampling_probs = self.memory.get_sampling_probs(mini_batch_indices)
-            is_weights = (1.0 / (len(self.memory) * sampling_probs)) ** self.beta
+            is_weights = (1.0 / (len(self.memory.valid_indices) * sampling_probs)) ** self.beta
             is_weights /= is_weights.max()  # normalize
             is_weights = torch.FloatTensor(is_weights).to(device)
 
