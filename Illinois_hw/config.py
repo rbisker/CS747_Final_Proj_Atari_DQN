@@ -6,7 +6,8 @@ HISTORY_SIZE = 4
 TRAINABLE_ACTIONS = [0, 2, 3]
 EXPLORE_STEPS = 500_000 #orignally 500000, lowered because only training every 4th step
 EPSILON_MIN = 0.1
-train_frame = 50_000#Originally 100000.  Lower to speed up testing during debugging
+TRAINING_STEPS = 750_000
+train_frame = 50_000 #Originally 100000.  Lower to speed up testing during debugging
 sticky_action_prob = 0.0
 learning_rate = 0.0005  #was 0.0001 for standardized test 12 and 13
 
@@ -21,3 +22,7 @@ update_target_network_frequency = 5_000 # was 10_000 for standardized test 12 an
 
 # Hyperparameters for DQN LSTM agent
 lstm_seq_length = 5
+
+#PER Hyperparameters
+PER_ALPHA = 0.6
+IS_BETA = 0.4

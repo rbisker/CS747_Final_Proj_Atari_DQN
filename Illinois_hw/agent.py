@@ -30,6 +30,7 @@ class Agent():
         self.epsilon_decay_rate = 0.0001
         self.train_start = train_frame 
         self.update_target = update_target_network_frequency
+        self.beta = self.beta_min = IS_BETA
         print(self.get_agent_type() + " initialized")
 
         # Load replay buffer from file if a path is provided
@@ -54,6 +55,7 @@ class Agent():
         self.target_net.eval()
         self.optimizer = optim.Adam(params=self.policy_net.parameters(), lr=learning_rate)
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=scheduler_step_size, gamma=scheduler_gamma)
+
         
     def get_agent_type(self):
         return "DQN Agent"
@@ -90,11 +92,14 @@ class Agent():
         # Sample and unpack
         if type(self.memory) == ReplayMemory:
             mini_batch = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+            use_per = False
         elif type(self.memory) == CircularReplayMemoryPER:
             mini_batch, mini_batch_indices = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+            use_per = True
         else:
             raise NotImplementedError("Invalid replay buffer type")
-
+        
+    
         mini_batch = np.array(mini_batch, dtype=object).transpose()
 
         history = np.stack(mini_batch[0], axis=0)
@@ -132,14 +137,28 @@ class Agent():
             target_q_values = rewards + self.discount_factor * next_state_max_q_values * (~terminations)
             target_q_values = target_q_values.unsqueeze(1)
 
-            #If Using PER, update memory td_errors
-            if type(self.memory) == CircularReplayMemoryPER:
-                td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
-                self.memory.update_td_errors(mini_batch_indices, td_errors)
+        ## PER Logic ##
+        if use_per:
+            # Anneal Beta
+            self.beta = min(1.0, self.beta + (1.0-self.beta_min)/TRAINING_STEPS)
+
+            # Update TD-errors in memory
+            td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
+            self.memory.update_td_errors(mini_batch_indices, td_errors)
+
+            # Importance sampling
+            sampling_probs = self.memory.get_sampling_probs(mini_batch_indices)
+            is_weights = (1.0 / (len(self.memory) * sampling_probs)) ** self.beta
+            is_weights /= is_weights.max()  # normalize
+            is_weights = torch.FloatTensor(is_weights).to(device)
+
+            # Use IS-weighted squared TD-error as loss with PER
+            loss = (is_weights * (q_values.squeeze(1) - target_q_values.squeeze(1)) ** 2).mean()
         
-        # Compute the Huber Loss
-        loss_fn = nn.SmoothL1Loss()
-        loss = loss_fn(q_values, target_q_values)
+        else:
+            # Compute the Huber Loss for standard replay buffer
+            loss_fn = nn.SmoothL1Loss()
+            loss = loss_fn(q_values, target_q_values)
 
         # Optimize the model, .step() both the optimizer and the scheduler!
         self.optimizer.zero_grad()
