@@ -32,23 +32,25 @@ class Agent():
         self.train_start = train_frame 
         self.update_target = update_target_network_frequency
         self.beta = self.beta_min = IS_BETA
+        self.alpha = self.alpha_max = PER_ALPHA
         self.scaler = GradScaler('cuda')  # for NVIDIA automatic mixed precision
         print(self.get_agent_type() + " initialized")
 
-        # Load replay buffer from file if a path is provided
-        # if replay_buffer_path and os.path.exists(replay_buffer_path):
-        #     with open(replay_buffer_path, 'rb') as f:
-        #         self.memory = pickle.load(f)
-        #     print(f"Replay buffer loaded from '{replay_buffer_path}' with size {len(self.memory)}")
-        # else:
-        #     if replay_buffer_path:
-        #         print(f"Replay buffer path '{replay_buffer_path}' not found. Creating new empty buffer.")
-        #     else:
-        #         print("No replay buffer path provided. Creating new empty buffer.")
-        #     self.memory = ReplayMemory()
+        #Load replay buffer from file if a path is provided
+        if replay_buffer_path and os.path.exists(replay_buffer_path):
+            with open(replay_buffer_path, 'rb') as f:
+                self.memory = pickle.load(f)
+            print(f"Replay buffer loaded from '{replay_buffer_path}' with size {len(self.memory)}")
+        else:
+            if replay_buffer_path:
+                print(f"Replay buffer path '{replay_buffer_path}' not found. Creating new empty buffer.")
+            else:
+                print("No replay buffer path provided. Creating new empty standard replay buffer.")
+                self.memory = ReplayMemory()
 
-        print("Setting up Circular PER Replay Buffer of size", Memory_capacity)
-        self.memory = CircularReplayMemoryPER(Memory_capacity, HISTORY_SIZE)
+        # print("Setting up Circular PER Replay Buffer of size", Memory_capacity)
+        # self.memory = CircularReplayMemoryPER(Memory_capacity, HISTORY_SIZE)
+        # self.memory = ReplayMemory()
 
         # Create the policy and target nets and sync them
         self.policy_net = DQN(action_size).to(device)
@@ -93,10 +95,10 @@ class Agent():
             
         # Sample and unpack
         if type(self.memory) == ReplayMemory:
-            mini_batch = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+            mini_batch = self.memory.improved_sample_mini_batch(BATCH_SIZE)
             use_per = False
         elif type(self.memory) == CircularReplayMemoryPER:
-            mini_batch, mini_batch_indices = self.memory.improved_sample_mini_batch(batch_size=BATCH_SIZE)
+            mini_batch, mini_batch_indices = self.memory.improved_sample_mini_batch(BATCH_SIZE, per_alpha=self.alpha)
             use_per = True
         else:
             raise NotImplementedError("Invalid replay buffer type")
@@ -142,15 +144,16 @@ class Agent():
 
             ## PER Logic ##
             if use_per:
-                # Anneal Beta
+                # Anneal Alpha and Beta
                 self.beta = min(1.0, self.beta + (1.0-self.beta_min)/TRAINING_STEPS)
+                self.alpha = max(0.2, self.alpha - (self.alpha_max - 0.2)/TRAINING_STEPS)
 
                 # Update TD-errors in replay buffer
                 td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
                 self.memory.update_td_errors(mini_batch_indices, td_errors)
 
                 # Importance sampling to remove the bias of oversampling high TD-error states
-                sampling_probs = np.clip(self.memory.get_sampling_probs(mini_batch_indices), 1e-7, None)  # Avoid 0 probabilites for division in next line
+                sampling_probs = np.clip(self.memory.get_sampling_probs(mini_batch_indices, alpha = self.alpha), 1e-7, None)  # Avoid 0 probabilites for division in next line
                 is_weights = (1.0 / (len(self.memory.valid_indices) * sampling_probs)) ** self.beta
                 is_weights /= is_weights.max()  # normalize
                 is_weights = torch.FloatTensor(is_weights).to(device)

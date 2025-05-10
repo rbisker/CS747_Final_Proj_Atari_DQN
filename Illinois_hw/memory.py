@@ -2,6 +2,7 @@ from config import *
 from collections import deque
 import numpy as np
 import random
+import torch
 
 
 class ReplayMemory(object):
@@ -75,9 +76,9 @@ class CircularReplayMemoryPER:
         self._priority_cache_dirty = True
         self._cached_probs = []  # sampling probabilities fo valid indices, should be length of len(self.valid_indices)
 
-    def push(self, history, action, reward, done, td_error=1.0):
+    def push(self, agent, frame, action, reward, done):
         i = self.position
-        self.memory[i] = (history, action, reward, done)
+        self.memory[i] = (frame, action, reward, done)
         self.valid_flags[i] = False  # Placeholder, updated retroactively
         
 
@@ -93,7 +94,14 @@ class CircularReplayMemoryPER:
             self.valid_flags[valid_start] = is_valid
             if is_valid:
                 self.valid_indices.append(valid_start)
-                self.td_errors.append(1.0)  # initialize td-error to 1.0 for new valid state
+                
+                # use policy to set TD-error of newly validated index
+                state = np.stack([(self.memory[(valid_start + j) % self.capacity][0])/255.0 for j in range(self.history_size)], axis=0)
+                next_state = np.stack([(self.memory[(valid_start + 1 + j) % self.capacity][0])/255.0 for j in range(self.history_size)], axis=0)
+                action = self.memory[(valid_start + self.history_size -1) % self.capacity][1]
+                reward = self.memory[(valid_start + self.history_size -1) % self.capacity][2]
+                done = self.memory[(valid_start + self.history_size -1) % self.capacity][3]
+                self.td_errors.append(self.get_td_error(agent, state, action, reward, done, next_state))  # set TD-error for valid index to policy estimated TD-error
 
         
 
@@ -118,18 +126,21 @@ class CircularReplayMemoryPER:
     :param HISTORY_SIZE: The number frames that make up a state passed to the network
     :return: A list of tuples containing the states, actions, rewards, and termination signals for each sample in the mini-batch.
     """
-    def improved_sample_mini_batch(self, batch_size):
+    def improved_sample_mini_batch(self, batch_size, per_alpha=PER_ALPHA):
         assert len(self.valid_indices) == len(self.td_errors) == sum(self.valid_flags), \
             "Before creating mimi-batch, # of valid indices, # of TD-errors and count of True valid flags must all be equal"
         if len(self.valid_indices) < batch_size:
+            print("Length of valid indices:", len(self.valid_indices))
             raise ValueError("Not enough valid samples.")
 
         # get sampling probabilities weighted by TD-errors
-        probs = self.get_sampling_probs(self.valid_indices)
+        probs = self.get_sampling_probs(self.valid_indices, per_alpha)
         
         cdf = np.cumsum(probs)
-        valid_indices_idxs = np.searchsorted(cdf, np.random.rand(batch_size))  # get indices of where a batch size of rands fall in the cdf
+        valid_indices_idxs = np.searchsorted(cdf, np.random.rand(batch_size), side='right')  # get indices of where a batch size of rands fall in the cdf
+        valid_indices_idxs = np.clip(valid_indices_idxs, 0, len(self.valid_indices) - 1)  # for safety reasons, make sure we don't go out of bounds
         sample_valid_indices = [self.valid_indices[i] for i in valid_indices_idxs]  # get the actual valid_indices
+
 
         mini_batch = []
         for idx in sample_valid_indices:
@@ -190,6 +201,27 @@ class CircularReplayMemoryPER:
             "std:", np.std(self.td_errors),
             "min:", np.min(self.td_errors),
             "max:", np.max(self.td_errors))
+        
+    def get_td_error(self, agent, state, action, reward, done, next_state):
+        with torch.no_grad():
+                    state_tensor = torch.from_numpy(state).unsqueeze(0).float().cuda()
+                    next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float().cuda()
+                
+                    # Q(s, a) under policy net
+                    q_values = agent.policy_net(state_tensor)
+                    q_sa = q_values[0, action]
+
+                    # Compute target Q(s', a') under target net
+                    next_q_values = agent.target_net(next_state_tensor)
+                    next_q_max = torch.max(next_q_values, dim=1)[0]  # max over actions
+
+                    target = reward + (0 if done else agent.discount_factor * next_q_max.item())
+
+                    td_error = abs(q_sa.item() - target)
+                    td_error = np.clip(td_error, 1e-6, 1)  # clip to avoid huge error spikes
+
+        return td_error
+
 
 
 

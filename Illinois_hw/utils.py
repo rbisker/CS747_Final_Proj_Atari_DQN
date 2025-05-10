@@ -20,25 +20,25 @@ def get_frame(X):
     x = np.uint8(resize(rgb2gray(X), (HEIGHT, WIDTH), mode='reflect') * 255)
     return x
 
-# As opposed to get_frame, crops out scoreboard at top and black space on bottom
-def new_get_frame(X):
-    # Convert to grayscale
-    gray = rgb2gray(X)
-    # Crop out top 20 and bottom 5 rows
-    gray_cropped = gray[20:-5, :]  # from (210, 160) → (185, 160)
-    # Resize to (HEIGHT, WIDTH)
-    resized = resize(gray_cropped, (HEIGHT, WIDTH), mode='reflect')
-    return np.uint8(resized * 255)
+# # As opposed to get_frame, crops out scoreboard at top and black space on bottom
+# def new_get_frame(X):
+#     # Convert to grayscale
+#     gray = rgb2gray(X)
+#     # Crop out top 20 and bottom 5 rows
+#     gray_cropped = gray[20:-5, :]  # from (210, 160) → (185, 160)
+#     # Resize to (HEIGHT, WIDTH)
+#     resized = resize(gray_cropped, (HEIGHT, WIDTH), mode='reflect')
+#     return np.uint8(resized * 255)
 
 def get_init_state(history, s, history_size):
     frame = get_frame(s)
     for i in range(history_size):
         history[i, :, :] = frame
 
-def new_get_init_state(history, s, history_size):
-    frame = new_get_frame(s)
-    for i in range(history_size):
-        history[i, :, :] = frame
+# def new_get_init_state(history, s, history_size):
+#     frame = new_get_frame(s)
+#     for i in range(history_size):
+#         history[i, :, :] = frame
 
 def do_random_actions(env, num_actions):
     for _ in range(num_actions):
@@ -59,10 +59,10 @@ def reset_after_life_loss(env, history):
 
     # Try firing the ball, detect success via frame differencing
     max_attempts = 5
-    prev_frame = new_get_frame(obs)
+    prev_frame = get_frame(obs)
     for i in range(max_attempts):
         obs, _, _, _, _ = env.step(1)  # FIRE
-        curr_frame = new_get_frame(obs)
+        curr_frame = get_frame(obs)
         if np.abs(curr_frame - prev_frame).sum() > 10:
             break  # Ball is likely launched
         prev_frame = curr_frame
@@ -73,7 +73,7 @@ def reset_after_life_loss(env, history):
         return obs, True
 
     # Rebuild history stack using the current post-FIRE frame
-    frame = new_get_frame(obs)
+    frame = get_frame(obs)
     history[:] = frame  # fills all history frames with the same post-FIRE frame
 
     return obs, False
