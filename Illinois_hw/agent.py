@@ -13,6 +13,7 @@ from config import *
 import os
 import pickle
 import math
+from torch.amp import autocast, GradScaler
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -31,6 +32,7 @@ class Agent():
         self.train_start = train_frame 
         self.update_target = update_target_network_frequency
         self.beta = self.beta_min = IS_BETA
+        self.scaler = GradScaler('cuda')  # for NVIDIA automatic mixed precision
         print(self.get_agent_type() + " initialized")
 
         # Load replay buffer from file if a path is provided
@@ -113,57 +115,59 @@ class Agent():
         terminations = list(mini_batch[3]) # checks if the game round is over
         terminations = torch.tensor(terminations, dtype=torch.bool).to(device)
 
-        # Compute Q(s_t, a), the Q-value of the current state
-        self.policy_net.train()
         
-        q_values_all = self.policy_net(states)
-        q_values = torch.gather(q_values_all, dim=1, index=actions.unsqueeze(1))
+        self.policy_net.train()  
+        with autocast(device_type='cuda'):
+            # Compute Q(s_t, a), the Q-value of the current state
+            q_values_all = self.policy_net(states)
+            q_values = torch.gather(q_values_all, dim=1, index=actions.unsqueeze(1))
 
-        #Monitor Q values
-        q_stats = {
-            'q_max': q_values_all.max().item(),
-            'q_min': q_values_all.min().item(),
-            'q_mean': q_values_all.mean().item(),
-        }
+            #Monitor Q values
+            q_stats = {
+                'q_max': q_values_all.max().item(),
+                'q_min': q_values_all.min().item(),
+                'q_mean': q_values_all.mean().item(),
+            }
+            
+            with torch.no_grad():
+                # Compute Q values of next state using target net
+                next_state_q_values = self.target_net(torch.from_numpy(next_states).to(device)) 
         
-        with torch.no_grad():
-            # Compute Q values of next state using target net
-            next_state_q_values = self.target_net(torch.from_numpy(next_states).to(device)) 
-       
-            # Find maximum Q-value at next state using target network (standard DQN)
-            next_state_max_q_values = torch.max(next_state_q_values, dim=1)[0]
+                # Find maximum Q-value at next state using target network (standard DQN)
+                next_state_max_q_values = torch.max(next_state_q_values, dim=1)[0]
 
-            # Compute the target Q-value.  Disregard the next Q-value if the game is over
-            target_q_values = rewards + self.discount_factor * next_state_max_q_values * (~terminations)
-            target_q_values = target_q_values.unsqueeze(1)
+                # Compute the target Q-value.  Disregard the next Q-value if the game is over
+                target_q_values = rewards + self.discount_factor * next_state_max_q_values * (~terminations)
+                target_q_values = target_q_values.unsqueeze(1)
 
-        ## PER Logic ##
-        if use_per:
-            # Anneal Beta
-            self.beta = min(1.0, self.beta + (1.0-self.beta_min)/TRAINING_STEPS)
+            ## PER Logic ##
+            if use_per:
+                # Anneal Beta
+                self.beta = min(1.0, self.beta + (1.0-self.beta_min)/TRAINING_STEPS)
 
-            # Update TD-errors in replay buffer
-            td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
-            self.memory.update_td_errors(mini_batch_indices, td_errors)
+                # Update TD-errors in replay buffer
+                td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
+                self.memory.update_td_errors(mini_batch_indices, td_errors)
 
-            # Importance sampling to remove the bias of oversampling high TD-error states
-            sampling_probs = self.memory.get_sampling_probs(mini_batch_indices)
-            is_weights = (1.0 / (len(self.memory.valid_indices) * sampling_probs)) ** self.beta
-            is_weights /= is_weights.max()  # normalize
-            is_weights = torch.FloatTensor(is_weights).to(device)
+                # Importance sampling to remove the bias of oversampling high TD-error states
+                sampling_probs = np.clip(self.memory.get_sampling_probs(mini_batch_indices), 1e-7, None)  # Avoid 0 probabilites for division in next line
+                is_weights = (1.0 / (len(self.memory.valid_indices) * sampling_probs)) ** self.beta
+                is_weights /= is_weights.max()  # normalize
+                is_weights = torch.FloatTensor(is_weights).to(device)
 
-            # Use IS-weighted squared TD-error as loss with PER
-            loss = (is_weights * (q_values.squeeze(1) - target_q_values.squeeze(1)) ** 2).mean()
-        
-        else:
-            # Compute the Huber Loss for standard replay buffer
-            loss_fn = nn.SmoothL1Loss()
-            loss = loss_fn(q_values, target_q_values)
+                # Use IS-weighted squared TD-error as loss with PER
+                loss = (is_weights * (q_values.squeeze(1) - target_q_values.squeeze(1)) ** 2).mean()
+            
+            else:
+                # Compute the Huber Loss for standard replay buffer
+                loss_fn = nn.SmoothL1Loss()
+                loss = loss_fn(q_values, target_q_values)
 
         # Optimize the model, .step() both the optimizer and the scheduler!
         self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
         self.scheduler.step()
 
         return loss.item(), q_stats

@@ -65,7 +65,7 @@ class CircularReplayMemoryPER:
         self.capacity = capacity
         self.history_size = history_size
         self.memory = [None] * capacity
-        self.td_errors = np.ones(capacity, dtype=np.float32)  # TD-error for state beginning at each index
+        self.td_errors = [] # TD-errors for valid transitions
         self.valid_flags = [False] * capacity # True if the next HISTORY_SIZE frames forward are not terminal
         self.valid_indices = []  # Only true for frames that are the start of a valid state
         self.position = 0
@@ -73,15 +73,13 @@ class CircularReplayMemoryPER:
 
         #Priority Caching
         self._priority_cache_dirty = True
-        self._cached_probs = None
-        self._cached_index_map = None
+        self._cached_probs = []  # sampling probabilities fo valid indices, should be length of len(self.valid_indices)
 
     def push(self, history, action, reward, done, td_error=1.0):
         i = self.position
         self.memory[i] = (history, action, reward, done)
-        self.td_errors[i] = td_error
         self.valid_flags[i] = False  # Placeholder, updated retroactively
-        self._priority_cache_dirty = True
+        
 
         # Retroactively validate a sample at index (i - history_size)
         valid_start = (i - self.history_size) % self.capacity
@@ -95,20 +93,23 @@ class CircularReplayMemoryPER:
             self.valid_flags[valid_start] = is_valid
             if is_valid:
                 self.valid_indices.append(valid_start)
+                self.td_errors.append(1.0)  # initialize td-error to 1.0 for new valid state
 
         
 
         # Handle validity buffer after memory is full and has looped
         if self.size == self.capacity:
             overwritten_index = self.position
-            try:
-                self.valid_indices.remove(overwritten_index) # Remove the overwritten index from valid list
-            except ValueError:
-                pass  # Already removed
+            if overwritten_index in self.valid_indices:
+                print(f"[DEBUG] Overwriting index {overwritten_index}, valid_indices count:", self.valid_indices.count(overwritten_index))
+                idx = self.valid_indices.index(overwritten_index)
+                del self.valid_indices[idx] # Remove the overwritten index from valid list
+                del self.td_errors[idx]     # Remove associated TD-error
             self.valid_flags[overwritten_index] = False  # reset overwritten index valid flag to False
 
         self.position = (self.position + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
+        self._priority_cache_dirty = True
 
     """
     Improved version of sample_mini_batch that uses priority experience replay (PER) based on TD-errors 
@@ -118,22 +119,20 @@ class CircularReplayMemoryPER:
     :return: A list of tuples containing the states, actions, rewards, and termination signals for each sample in the mini-batch.
     """
     def improved_sample_mini_batch(self, batch_size):
-        assert sum(self.valid_flags) == len(self.valid_indices), f"Valid indices must match number of true valid flags.  \
-                                                                   Mem Len: {len(self.memory)}, Valid flag cnt: {sum(self.valid_flags)}, Valid indices cnt: {len(self.valid_indices)}"
+        assert len(self.valid_indices) == len(self.td_errors) == sum(self.valid_flags), \
+            "Before creating mimi-batch, # of valid indices, # of TD-errors and count of True valid flags must all be equal"
         if len(self.valid_indices) < batch_size:
             raise ValueError("Not enough valid samples.")
 
         # get sampling probabilities weighted by TD-errors
         probs = self.get_sampling_probs(self.valid_indices)
-
-        # sample indices probabilisitcally using cumulative sum and searchsorted for increased efficiency
-        cum_probs = np.cumsum(probs)
-        rand_vals = np.random.rand(batch_size) * cum_probs[-1]
-        sample_ids = np.searchsorted(cum_probs, rand_vals)
-        sample_indices = [self.valid_indices[i] for i in sample_ids]
+        
+        cdf = np.cumsum(probs)
+        valid_indices_idxs = np.searchsorted(cdf, np.random.rand(batch_size))  # get indices of where a batch size of rands fall in the cdf
+        sample_valid_indices = [self.valid_indices[i] for i in valid_indices_idxs]  # get the actual valid_indices
 
         mini_batch = []
-        for idx in sample_indices:
+        for idx in sample_valid_indices:
             sample = [(self.memory[(idx + j) % self.capacity]) for j in range(self.history_size + 1)]
             sample = np.array(sample, dtype=object)
 
@@ -153,31 +152,33 @@ class CircularReplayMemoryPER:
             # print("[PER DEBUG] Len of valid indices:", len(self.valid_indices), "  Len of valid flags:", sum(self.valid_flags))
         ################################################
 
-        return mini_batch, sample_indices
+        return mini_batch, valid_indices_idxs
     
     """
     Given a list of sampled indices, return their sampling probabilities
     under the current priority distribution (with exponent alpha).
     """
-    def get_sampling_probs(self, indices, alpha=PER_ALPHA):
-        # Get sampling probabilities for all valid indices
+    def get_sampling_probs(self, valid_indices_idxs, alpha=PER_ALPHA):
+
         if self._priority_cache_dirty:
-            all_priorities = np.array([self.td_errors[i] for i in self.valid_indices], dtype=np.float32)
-            all_priorities = np.power(all_priorities, alpha)
+            # Get sampling probabilities for all valid indices
+            all_priorities = np.power(self.td_errors, alpha)
             total_priority = all_priorities.sum()
-            self._cached_probs = all_priorities / total_priority if total_priority > 0 else np.ones_like(all_priorities)/len(self.valid_indices)
-            # Map each index in `indices` to its position in `valid_indices`
-            self._cached_index_map = index_to_pos = {idx: i for i, idx in enumerate(self.valid_indices)}
+            self._cached_probs = all_priorities / total_priority if total_priority > 0 else np.ones_like(all_priorities)/len(self.valid_indices)  
+            assert len(self._cached_probs) == len(self.valid_indices), "On priority cache update, len(self._cached_probs) != len(self.valid_indices)"
             self._priority_cache_dirty = False
 
-        # Extract sampling probs for just the passed indices
-        sample_probs = np.array([self._cached_probs[self._cached_index_map[i]] for i in indices], dtype=np.float32)
+        # If all full valid indices were passed, return full list of sampling probs
+        if valid_indices_idxs == self.valid_indices:
+            return self._cached_probs
+        else: 
+            # Extract sampling probs for just the passed indices
+            sample_probs = np.array([self._cached_probs[i] for i in valid_indices_idxs], dtype=np.float32)
+            return sample_probs
 
-        return sample_probs
 
-
-    def update_td_errors(self, indices, new_errors):
-        for i, err in zip(indices, new_errors):
+    def update_td_errors(self, valid_indices_idxs, new_errors):
+        for i, err in zip(valid_indices_idxs, new_errors):
             self.td_errors[i] = err
         self._priority_cache_dirty = True
 
