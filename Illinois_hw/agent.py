@@ -149,7 +149,8 @@ class Agent():
                 self.alpha = max(0.2, self.alpha - (self.alpha_max - 0.2)/TRAINING_STEPS)
 
                 # Update TD-errors in replay buffer
-                td_errors = np.abs((q_values - target_q_values).squeeze(1).detach().cpu().numpy())
+                td_errors = (q_values - target_q_values).squeeze(1).detach().cpu().numpy()
+                td_errors = np.clip(np.abs(td_errors), 1e-6, 1)  # clip to avoid divide by zero and huge error spikes
                 self.memory.update_td_errors(mini_batch_indices, td_errors)
 
                 # Importance sampling to remove the bias of oversampling high TD-error states
