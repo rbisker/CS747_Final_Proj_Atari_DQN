@@ -3,6 +3,7 @@ from collections import deque
 import numpy as np
 import random
 import torch
+from concurrent.futures import ThreadPoolExecutor
 
 
 class ReplayMemory(object):
@@ -149,16 +150,28 @@ class CircularReplayMemoryPER:
         sample_valid_indices = [self.valid_indices[i] for i in valid_indices_idxs]  # get the actual valid_indices
 
 
-        mini_batch = []
-        for idx in sample_valid_indices:
+        # mini_batch = []
+        # for idx in sample_valid_indices:
+        #     sample = [(self.memory[(idx + j) % self.capacity]) for j in range(self.history_size + 1)]
+        #     sample = np.array(sample, dtype=object)
+
+        #     states = np.stack(sample[:, 0], axis=0)
+        #     actions = int(sample[self.history_size - 1, 1])
+        #     rewards = float(sample[self.history_size - 1, 2])
+        #     terminations = bool(sample[self.history_size - 1, 3])
+        
+        def build_sample(idx):
             sample = [(self.memory[(idx + j) % self.capacity]) for j in range(self.history_size + 1)]
             sample = np.array(sample, dtype=object)
-
             states = np.stack(sample[:, 0], axis=0)
             actions = int(sample[self.history_size - 1, 1])
             rewards = float(sample[self.history_size - 1, 2])
             terminations = bool(sample[self.history_size - 1, 3])
-            mini_batch.append((states, actions, rewards, terminations))
+            return (states, actions, rewards, terminations)
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            mini_batch = list(executor.map(build_sample, sample_valid_indices))
+
 
         ## DEBUG ###
         # if random.random() < 0.001:

@@ -113,13 +113,13 @@ class Agent():
         mini_batch = np.array(mini_batch, dtype=object).transpose()
 
         history = np.stack(mini_batch[0], axis=0)
-        states = np.float16(history[:, :HISTORY_SIZE, :, :]) / 255.
+        states = np.float32(history[:, :HISTORY_SIZE, :, :]) / 255.
         states = torch.from_numpy(states).cuda()
         actions = list(mini_batch[1])
         actions = torch.LongTensor(actions).cuda()
         rewards = list(mini_batch[2])
         rewards = torch.FloatTensor(rewards).cuda()
-        next_states = np.float16(history[:, 1:, :, :]) / 255.
+        next_states = np.float32(history[:, 1:, :, :]) / 255.
         terminations = list(mini_batch[3]) # checks if the game round is over
         terminations = torch.tensor(terminations, dtype=torch.bool).to(device)
 
