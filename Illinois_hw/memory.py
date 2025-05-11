@@ -79,6 +79,9 @@ class CircularReplayMemoryPER:
 
     def push(self, frame, action, reward, done, mean_recent_td_error=1.0):
         i = self.position
+        # Convert frame to float16 if it's a NumPy array and not already float16
+        if isinstance(frame, np.ndarray) and frame.dtype != np.float16:  
+            frame = frame.astype(np.float16)
         self.memory[i] = (frame, action, reward, done)
         self.valid_flags[i] = False  # Placeholder, updated retroactively
         
@@ -184,7 +187,7 @@ class CircularReplayMemoryPER:
             self._priority_cache_dirty = False
 
         # If all full valid indices were passed, return full list of sampling probs
-        if valid_indices_idxs == self.valid_indices:
+        if np.array_equal(valid_indices_idxs, self.valid_indices):
             return self._cached_probs
         else: 
             # Extract sampling probs for just the passed indices

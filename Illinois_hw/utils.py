@@ -4,7 +4,7 @@ from skimage.transform import resize
 from skimage.color import rgb2gray
 from config import *
 import torch
-import cv2
+# import cv2
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
