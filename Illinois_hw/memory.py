@@ -72,11 +72,12 @@ class CircularReplayMemoryPER:
         self.position = 0
         self.size = 0
 
+
         #Priority Caching
         self._priority_cache_dirty = True
         self._cached_probs = []  # sampling probabilities fo valid indices, should be length of len(self.valid_indices)
 
-    def push(self, agent, frame, action, reward, done):
+    def push(self, frame, action, reward, done, mean_recent_td_error=1.0):
         i = self.position
         self.memory[i] = (frame, action, reward, done)
         self.valid_flags[i] = False  # Placeholder, updated retroactively
@@ -104,7 +105,8 @@ class CircularReplayMemoryPER:
                 # self.td_errors.append(self.get_td_error(agent, state, action, reward, done, next_state))  # set TD-error for valid index to policy estimated TD-error
 
                 # set td-error to mean of recent TD-errors [FASTER!]
-                self.td_errors.append(np.mean(self.td_errors[-1000:]))
+                self.td_errors.append(mean_recent_td_error)
+                
 
         
 
@@ -220,7 +222,7 @@ class CircularReplayMemoryPER:
                     target = reward + (0 if done else agent.discount_factor * next_q_max.item())
 
                     td_error = abs(q_sa.item() - target)
-                    td_error = np.clip(td_error, 1e-6, 1)  # clip to avoid huge error spikes
+                    # td_error = np.clip(td_error, 1e-6, 1)  # clip to avoid huge error spikes
 
         return td_error
 

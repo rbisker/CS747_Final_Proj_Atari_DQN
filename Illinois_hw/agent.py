@@ -14,6 +14,7 @@ import os
 import pickle
 import math
 from torch.amp import autocast, GradScaler
+from collections import deque
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -33,8 +34,9 @@ class Agent():
         self.update_target = update_target_network_frequency
         self.beta = self.beta_min = IS_BETA
         self.alpha = self.alpha_max = PER_ALPHA
+        self.recent_td_errors = deque(maxlen=1000)
         self.scaler = GradScaler('cuda')  # for NVIDIA automatic mixed precision
-        print(self.get_agent_type() + " initialized")
+
 
         #Load replay buffer from file if a path is provided
         if replay_buffer_path and os.path.exists(replay_buffer_path):
@@ -60,6 +62,8 @@ class Agent():
         self.target_net.eval()
         self.optimizer = optim.Adam(params=self.policy_net.parameters(), lr=learning_rate)
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=scheduler_step_size, gamma=scheduler_gamma)
+        
+
 
         
     def get_agent_type(self):
@@ -132,7 +136,7 @@ class Agent():
                 'q_mean': q_values_all.mean().item(),
             }
             
-            self.targert_net.eval()  # Ensure target net is in inference mode
+            self.target_net.eval()  # Ensure target net is in inference mode
             with torch.no_grad():
                 # Compute Q values of next state using target net
                 next_state_q_values = self.target_net(torch.from_numpy(next_states).to(device)) 
@@ -147,12 +151,15 @@ class Agent():
             ## PER Logic ##
             if use_per:
                 # Anneal Alpha and Beta
-                self.beta = min(1.0, self.beta + (1.0-self.beta_min)/TRAINING_STEPS)
-                self.alpha = max(0.2, self.alpha - (self.alpha_max - 0.2)/TRAINING_STEPS)
+                beta_max =0.8
+                alpha_min = 0.2
+                self.beta = min(beta_max, self.beta + (beta_max-self.beta_min)/TRAINING_STEPS)
+                self.alpha = max(alpha_min, self.alpha - (self.alpha_max - alpha_min)/TRAINING_STEPS)
 
                 # Update TD-errors in replay buffer
                 td_errors = (q_values - target_q_values).squeeze(1).detach().cpu().numpy()
-                td_errors = np.clip(np.abs(td_errors), 1e-6, 1)  # clip to avoid divide by zero and huge error spikes
+                td_errors = np.abs(td_errors)  # removed clip to preserve dynamic range
+                self.recent_td_errors.extend(td_errors)  # save recently calculated TD-errors for use in memory setting default TD-error of newly validated states
                 self.memory.update_td_errors(mini_batch_indices, td_errors)
 
                 # Importance sampling to remove the bias of oversampling high TD-error states
