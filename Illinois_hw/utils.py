@@ -52,10 +52,11 @@ def reset_after_life_loss(env, history):
     Ensures the ball is fired and the history stack is rebuilt.
     """
     # Take a few random non-FIRE actions to vary paddle position
-    num_random_actions = random.randint(10, 25)
+    num_random_actions = random.randint(5, 25)
     obs = None
     for _ in range(num_random_actions):  
-        obs, _, _, _, _ = env.step(random.choice([2, 3]))  #move paddle randomly left and right a bit before firing
+        obs, _, _, _, _ = env.step(random.choice(TRAINABLE_ACTIONS))  #do some random actions before firing to increase variety
+        # obs, _, _, _, _ = env.step(0)
 
     # Try firing the ball, detect success via frame differencing
     max_attempts = 5

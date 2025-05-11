@@ -43,6 +43,7 @@ class Agent():
             print(f"Replay buffer loaded from '{replay_buffer_path}' with size {len(self.memory)}")
         else:
             if replay_buffer_path:
+                self.policy_net.eval() # Ensure inference mode
                 print(f"Replay buffer path '{replay_buffer_path}' not found. Creating new empty buffer.")
             else:
                 print("No replay buffer path provided. Creating new empty standard replay buffer.")
@@ -131,6 +132,7 @@ class Agent():
                 'q_mean': q_values_all.mean().item(),
             }
             
+            self.targert_net.eval()  # Ensure target net is in inference mode
             with torch.no_grad():
                 # Compute Q values of next state using target net
                 next_state_q_values = self.target_net(torch.from_numpy(next_states).to(device)) 

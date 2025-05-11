@@ -95,13 +95,16 @@ class CircularReplayMemoryPER:
             if is_valid:
                 self.valid_indices.append(valid_start)
                 
-                # use policy to set TD-error of newly validated index
-                state = np.stack([(self.memory[(valid_start + j) % self.capacity][0])/255.0 for j in range(self.history_size)], axis=0)
-                next_state = np.stack([(self.memory[(valid_start + 1 + j) % self.capacity][0])/255.0 for j in range(self.history_size)], axis=0)
-                action = self.memory[(valid_start + self.history_size -1) % self.capacity][1]
-                reward = self.memory[(valid_start + self.history_size -1) % self.capacity][2]
-                done = self.memory[(valid_start + self.history_size -1) % self.capacity][3]
-                self.td_errors.append(self.get_td_error(agent, state, action, reward, done, next_state))  # set TD-error for valid index to policy estimated TD-error
+                # use policy to set TD-error of newly validated index [ADDS SIGNIFICANT TRAINING TIME]
+                # state = np.stack([(self.memory[(valid_start + j) % self.capacity][0])/255.0 for j in range(self.history_size)], axis=0)
+                # next_state = np.stack([(self.memory[(valid_start + 1 + j) % self.capacity][0])/255.0 for j in range(self.history_size)], axis=0)
+                # action = self.memory[(valid_start + self.history_size -1) % self.capacity][1]
+                # reward = self.memory[(valid_start + self.history_size -1) % self.capacity][2]
+                # done = self.memory[(valid_start + self.history_size -1) % self.capacity][3]
+                # self.td_errors.append(self.get_td_error(agent, state, action, reward, done, next_state))  # set TD-error for valid index to policy estimated TD-error
+
+                # set td-error to mean of recent TD-errors [FASTER!]
+                self.td_errors.append(np.mean(self.td_errors[-1000:]))
 
         
 
@@ -109,7 +112,6 @@ class CircularReplayMemoryPER:
         if self.size == self.capacity:
             overwritten_index = self.position
             if overwritten_index in self.valid_indices:
-                print(f"[DEBUG] Overwriting index {overwritten_index}, valid_indices count:", self.valid_indices.count(overwritten_index))
                 idx = self.valid_indices.index(overwritten_index)
                 del self.valid_indices[idx] # Remove the overwritten index from valid list
                 del self.td_errors[idx]     # Remove associated TD-error
