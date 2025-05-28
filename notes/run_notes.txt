@@ -1,0 +1,81 @@
+Run 2 Changes
+ -- Using DDQN
+ -- Introduced random actions between lives in both replay buffer and training
+ -- Prefilled replay buffer with 100K steps of Run 1 Serial using epsilon=0.2, sticky action prob = 0.2
+ -- Memory Capacity reduced from 1M to 300K
+ -- Sticky Action prob = 0.2
+ -- Implemented adaptive training frequency
+ 
+ Run 3 Changes
+ -- logarithimic decay epsilong (rate = .000015)
+ -- LR scheduler step size 50K (from 100K) and gamma=0.5 (from 0.4)
+ NOTE: changed score moving average for graph to 50 episodes
+ 
+ Run 4 Changes
+ -- start from naive agent, start training after 20K frames
+ -- replay buffer size of 200K
+ -- recursive eponential epsilon decay (.998 rate)
+ -- epislon bump on reward stall
+ -- fixed history reset and env randomization after lost lives
+ -- removed adaptive training frequency.  Now locked at every 4 frames
+ -- update_target_network_frequency increased to 3000, so given training every 4 frames, actual update frequency is every 12K frames
+ 
+ Run 5 Changes
+ -- modified epsilon bump as follows:
+	plateau_patience = 200 # was 100
+	epsilon_bump = 0.15  # was .1
+	soonest_bump = 600  # didn't exist	
+	
+
+Run 6 (DQN)
+- standardize at 350K training frames for comparison purposes
+- generally try to match hyperparams from DQN and DDQN papers
+- pre-seeded replay buffer with 50K frames from best peforming Run5 model
+- lower batch size to 64
+- train every frame
+- update target frequency to 10K
+- removed sticky actions
+- Epsilon min 0.1.  Epsilon -= (self.epsilon - self.epsilon_min) / 500K
+
+Run 7 (DQN)
+-- Same as run 6 but with 750K frames
+
+
+Run 11 (DDQN)
+-- pre-seeded replay buffer with 50K frames from best peforming Run5 model
+-- 1M steps
+-- Epsilon min 0.1.  Epsilon -= (self.epsilon - self.epsilon_min) / 750K
+-- Epsilon bump of .15 if 300 eps no improvement (after ep 2000 only)
+-- Mem Capacity 750K
+-- batch_size = 64 #Originally 128
+-- scheduler_gamma = 0.65
+-- scheduler_step_size = 100_000  #orignally 100_000
+-- update_target_network_frequency = 10_000
+
+
+Runs 12 and 13
+--750K training frames each
+-- Run 12 is DDQN, 13 is DQN
+-- Using fixed mini batch sampling logic
+-- Other hyperparams:	
+	EXPLORE_STEPS = 500_000 #orignally 500000, lowered because only training every 4th step
+	EPSILON_MIN = 0.1
+	train_frame = 50_000 #Originally 100000.  Lower to speed up testing during debugging
+	sticky_action_prob = 0.0
+	learning_rate = 0.0001
+	evaluation_reward_length = 50  #changed from 100
+	Memory_capacity = 750_000 #Originally 1000000
+	BATCH_SIZE = 64 #Originally 128
+	scheduler_gamma = 0.65
+	scheduler_step_size = 100_000  #orignally 100_000
+
+
+ 
+ Future Improvements:
+-- LTSM
+-- modifying NN to include temporal differencing frames as inputs
+-- prioritized replay experience
+
+Non Improvement TODOs:
+-- Implement model tester (run X rounds, compute avg score)
+-- If time, implement PPO SB3 and compare to my DQN model
